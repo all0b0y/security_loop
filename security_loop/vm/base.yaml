@@ -1,0 +1,57 @@
+# Lima template for the security_loop base image.
+# Hard requirements: no host mounts, no containerd, no port forwarding.
+# Guest network is used once while building the base image, then egress is
+# blocked by a root-owned nftables policy that every clone inherits.
+minimumLimaVersion: 2.0.0
+base:
+- template:_images/debian-13
+vmType: vz
+cpus: 2
+memory: 2GiB
+disk: 8GiB
+mounts: []
+containerd:
+  system: false
+  user: false
+portForwards:
+- guestIP: "0.0.0.0"
+  guestPortRange: [1, 65535]
+  ignore: true
+- guestIP: "::"
+  guestPortRange: [1, 65535]
+  ignore: true
+ssh:
+  forwardAgent: false
+  forwardX11: false
+provision:
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    if [ -f /etc/security_loop_base ]; then exit 0; fi
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends python3 nftables
+    id mediator >/dev/null 2>&1 || useradd --system --create-home --home-dir /home/mediator --shell /usr/sbin/nologin mediator
+    install -d -o root -g root -m 0755 /opt/security_loop
+    install -d -o root -g root -m 0755 /opt/security_loop/mediator
+    install -d -o root -g root -m 0700 /var/lib/security_loop
+    cat > /etc/nftables.conf <<'EOF'
+    #!/usr/sbin/nft -f
+    flush ruleset
+    table inet security_loop {
+      chain input {
+        type filter hook input priority 0; policy drop;
+        iif "lo" accept
+        ct state established,related accept
+        tcp dport 22 accept
+      }
+      chain output {
+        type filter hook output priority 0; policy drop;
+        oif "lo" accept
+        ct state established,related accept
+      }
+    }
+    EOF
+    systemctl enable nftables
+    touch /etc/security_loop_base
