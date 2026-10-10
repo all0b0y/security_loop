@@ -1,0 +1,16 @@
+# Local development notes, probes and logs
+.dev/
+
+# Agent instruction files
+AGENTS.md
+CLAUDE.md
+.claude/
+.agents/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# macOS
+.DS_Store
